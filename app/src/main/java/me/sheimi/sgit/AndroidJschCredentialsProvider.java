@@ -32,7 +32,6 @@ public class AndroidJschCredentialsProvider extends org.eclipse.jgit.transport.C
 
     @Override
     public boolean get(URIish uri, CredentialItem... items) throws UnsupportedCredentialItem {
-        Timber.w("get for uri %s", uri);
         /*
          * The caller will have passed some number of CredentialItems. We only
          * support those of StringType (representing passphrases for private
@@ -56,7 +55,7 @@ public class AndroidJschCredentialsProvider extends org.eclipse.jgit.transport.C
                 // the getPromptText() will be "Passphrase for /.../files/ssh/key_file_name_rsa"
                 String prompt = item.getPromptText();
                 String keyfileName = prompt.substring(prompt.lastIndexOf("/")+1, prompt.length());
-                String password = mSecPrefsHelper.get(keyfileName);
+                String password = mSecPrefsHelper == null ? null : mSecPrefsHelper.get(keyfileName);
                 if (password != null) {
                     ((CredentialItem.StringType) item).setValue(password);
                     foundAny = true;

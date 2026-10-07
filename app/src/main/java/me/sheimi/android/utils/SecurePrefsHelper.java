@@ -1,99 +1,82 @@
 package me.sheimi.android.utils;
 
-import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.os.Build;
-import android.security.KeyPairGeneratorSpec;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
+import android.util.Base64;
 
-import com.securepreferences.SecurePreferences;
-
-import java.io.IOException;
-import java.math.BigInteger;
-import java.security.InvalidAlgorithmParameterException;
-import java.security.KeyPairGenerator;
+import java.io.File;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.KeyStore;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.UnrecoverableEntryException;
-import java.security.cert.CertificateException;
-import java.util.Calendar;
 
-import javax.security.auth.x500.X500Principal;
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
 
 import timber.log.Timber;
 
 /**
- * Securely store sensitive data in prefs, encrypting with a key pair that is stored in
- * the Android KeyStore, thus min of API 18 (4.3) is required.
- *
- * The basic idea came from:
- * Ref: https://medium.com/@ali.muzaffar/securing-sharedpreferences-in-android-a21883a9cbf8
- *
- * while the actual code comes from:
- * Ref: https://medium.com/@ericfu/securely-storing-secrets-in-an-android-application-501f030ae5a3
- *
- * But in this class, all we do is use the generated RSA cert as the "password" used for AES encryption
- * by the SecurePreferences library, by taking the md5 of the RSA keys certificates toString()
+ * Stores small secrets (SSH key passphrases) in a private SharedPreferences file, encrypted
+ * with AES-256-GCM using a key that never leaves the Android Keystore.
  */
-
 public class SecurePrefsHelper {
 
-    private static final String AndroidKeyStore = "AndroidKeyStore";
-    private static final String KEY_ALIAS = "mgit_prefs";
-    private static final String SEC_PREFS_FILE_NAME = "sec_prefs.xml";
-    private static final String KEY_ALGORITHM_RSA = "RSA"; //KeyProperties.KEY_ALGORITHM_RSA is only available in API 23, so need to define it here
+    private static final String ANDROID_KEY_STORE = "AndroidKeyStore";
+    private static final String KEY_ALIAS = "mgit_secrets_aes";
+    private static final String PREFS_FILE_NAME = "secrets";
+    private static final String TRANSFORMATION = "AES/GCM/NoPadding";
+    private static final int GCM_TAG_BITS = 128;
 
-    SharedPreferences mSecurePrefs;
-    private KeyStore mKeyStore;
+    // left behind by the old secure-preferences based implementation
+    private static final String LEGACY_PREFS_FILE_NAME = "sec_prefs.xml";
+    private static final String LEGACY_KEY_ALIAS = "mgit_prefs";
+
+    private final SharedPreferences mPrefs;
+    private final SecretKey mKey;
 
     public SecurePrefsHelper(Context context) throws SecurePrefsException {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            throw new SecurePrefsException("Min Android version require:"+Build.VERSION_CODES.JELLY_BEAN_MR2);
-        }
-
         try {
-            mKeyStore = KeyStore.getInstance(AndroidKeyStore);
-            mKeyStore.load(null);
-
-            // make sure we have a keypair in keystore
-            generateKeyPair(context);
-
-            KeyStore.PrivateKeyEntry keypair = (KeyStore.PrivateKeyEntry) mKeyStore.getEntry(KEY_ALIAS, null);
-            if (keypair == null) {
-                throw new SecurePrefsException("missing keypair");
-            }
-            String prefsPassword = BasicFunctions.md5(keypair.getCertificate().toString());
-            Timber.w("pref password %s", prefsPassword);
-            mSecurePrefs = new SecurePreferences(context, prefsPassword, SEC_PREFS_FILE_NAME);
-
-        } catch (KeyStoreException|CertificateException|NoSuchAlgorithmException|
-            InvalidAlgorithmParameterException|NoSuchProviderException|IOException|UnrecoverableEntryException e) {
+            KeyStore keyStore = KeyStore.getInstance(ANDROID_KEY_STORE);
+            keyStore.load(null);
+            removeLegacyStore(context, keyStore);
+            mKey = getOrCreateKey(keyStore);
+        } catch (Exception e) {
             Timber.e(e, "keystore error");
             throw new SecurePrefsException(e);
         }
+        mPrefs = context.getSharedPreferences(PREFS_FILE_NAME, Context.MODE_PRIVATE);
     }
 
-    @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR2)
-    void generateKeyPair(Context context) throws NoSuchProviderException, NoSuchAlgorithmException,
-        InvalidAlgorithmParameterException, KeyStoreException {
-        // Generate the RSA key pairs
-        if (!mKeyStore.containsAlias(KEY_ALIAS)) {
-            // Generate a key pair for encryption
-            Calendar start = Calendar.getInstance();
-            Calendar end = Calendar.getInstance();
-            end.add(Calendar.YEAR, 30);
-            KeyPairGeneratorSpec spec = new KeyPairGeneratorSpec.Builder(context)
-                .setAlias(KEY_ALIAS)
-                .setSubject(new X500Principal("CN=" + KEY_ALIAS))
-                .setSerialNumber(BigInteger.TEN)
-                .setStartDate(start.getTime())
-                .setEndDate(end.getTime())
-                .build();
-            KeyPairGenerator kpg = KeyPairGenerator.getInstance(KEY_ALGORITHM_RSA, AndroidKeyStore);
-            kpg.initialize(spec);
-            kpg.generateKeyPair();
+    private static SecretKey getOrCreateKey(KeyStore keyStore) throws Exception {
+        KeyStore.Entry entry = keyStore.getEntry(KEY_ALIAS, null);
+        if (entry instanceof KeyStore.SecretKeyEntry) {
+            return ((KeyStore.SecretKeyEntry) entry).getSecretKey();
+        }
+        KeyGenerator generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE);
+        generator.init(new KeyGenParameterSpec.Builder(KEY_ALIAS,
+            KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256)
+            .build());
+        return generator.generateKey();
+    }
+
+    /**
+     * The previous implementation's secrets can't be carried over without its abandoned library,
+     * so drop them; affected keys just need their passphrase entered again.
+     */
+    private static void removeLegacyStore(Context context, KeyStore keyStore) throws Exception {
+        File legacyPrefs = new File(context.getApplicationInfo().dataDir, "shared_prefs/" + LEGACY_PREFS_FILE_NAME);
+        if (legacyPrefs.exists() && !legacyPrefs.delete()) {
+            Timber.w("could not delete legacy secure prefs");
+        }
+        if (keyStore.containsAlias(LEGACY_KEY_ALIAS)) {
+            keyStore.deleteEntry(LEGACY_KEY_ALIAS);
         }
     }
 
@@ -101,10 +84,26 @@ public class SecurePrefsHelper {
      * Retrieve a String value from the secured preferences.
      *
      * @param pref
-     * @return value of pref or null if no such pref
+     * @return value of pref or null if no such pref (or it can no longer be decrypted)
      */
     public String get(String pref) {
-        return mSecurePrefs.getString(pref, null);
+        String stored = mPrefs.getString(pref, null);
+        if (stored == null) {
+            return null;
+        }
+        try {
+            ByteBuffer buffer = ByteBuffer.wrap(Base64.decode(stored, Base64.NO_WRAP));
+            byte[] iv = new byte[buffer.get()];
+            buffer.get(iv);
+            byte[] cipherText = new byte[buffer.remaining()];
+            buffer.get(cipherText);
+            Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+            cipher.init(Cipher.DECRYPT_MODE, mKey, new GCMParameterSpec(GCM_TAG_BITS, iv));
+            return new String(cipher.doFinal(cipherText), StandardCharsets.UTF_8);
+        } catch (GeneralSecurityException | RuntimeException e) {
+            Timber.e(e, "could not decrypt secret");
+            return null;
+        }
     }
 
     /**
@@ -113,6 +112,29 @@ public class SecurePrefsHelper {
      * @param value
      */
     public void set(String name, String value) {
-        mSecurePrefs.edit().putString(name, value).apply();
+        try {
+            Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+            cipher.init(Cipher.ENCRYPT_MODE, mKey);
+            byte[] iv = cipher.getIV();
+            byte[] cipherText = cipher.doFinal(value.getBytes(StandardCharsets.UTF_8));
+            ByteBuffer buffer = ByteBuffer.allocate(1 + iv.length + cipherText.length);
+            buffer.put((byte) iv.length).put(iv).put(cipherText);
+            mPrefs.edit().putString(name, Base64.encodeToString(buffer.array(), Base64.NO_WRAP)).apply();
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("could not encrypt secret", e);
+        }
+    }
+
+    public void remove(String name) {
+        mPrefs.edit().remove(name).apply();
+    }
+
+    public void rename(String from, String to) {
+        String stored = mPrefs.getString(from, null);
+        SharedPreferences.Editor editor = mPrefs.edit().remove(from);
+        if (stored != null) {
+            editor.putString(to, stored);
+        }
+        editor.apply();
     }
 }

@@ -20,6 +20,8 @@ import java.io.FileFilter;
 
 import me.sheimi.android.utils.BasicFunctions;
 import me.sheimi.android.utils.FsUtils;
+import me.sheimi.android.utils.SecurePrefsHelper;
+import me.sheimi.sgit.MGitApplication;
 import me.sheimi.sgit.R;
 import me.sheimi.sgit.activities.ViewFileActivity;
 import me.sheimi.sgit.dialogs.EditKeyPasswordDialog;
@@ -108,6 +110,10 @@ public class PrivateKeyManageActivity extends FileExplorerActivity implements Ac
 			public void onClick(DialogInterface dialog, int which) {
 			    FsUtils.deleteFile(mChosenFile);
 			    FsUtils.deleteFile(PrivateKeyUtils.getPublicKey(mChosenFile));
+			    SecurePrefsHelper secrets = MGitApplication.getContext().getSecurePrefsHelper();
+			    if (secrets != null) {
+				secrets.remove(mChosenFile.getName());
+			    }
 			    refreshList();
 			}
 

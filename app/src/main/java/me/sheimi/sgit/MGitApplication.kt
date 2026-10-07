@@ -52,10 +52,11 @@ open class MGitApplication : Application() {
         prefenceHelper = PreferenceHelper(this)
         try {
             securePrefsHelper = SecurePrefsHelper(this)
-            mCredentialsProvider = AndroidJschCredentialsProvider(securePrefsHelper)
         } catch (e: SecurePrefsException) {
             Timber.e(e)
         }
+        // still needed without a secrets store: keys without passphrases keep working
+        mCredentialsProvider = AndroidJschCredentialsProvider(securePrefsHelper)
     }
 
     override fun attachBaseContext(base:Context) {

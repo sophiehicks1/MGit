@@ -3,7 +3,9 @@ package me.sheimi.sgit.dialogs;
 import java.io.File;
 
 import me.sheimi.android.utils.FsUtils;
+import me.sheimi.android.utils.SecurePrefsHelper;
 import me.sheimi.android.views.SheimiDialogFragment;
+import me.sheimi.sgit.MGitApplication;
 import me.sheimi.sgit.R;
 import me.sheimi.sgit.activities.explorer.PrivateKeyManageActivity;
 import android.app.AlertDialog;
@@ -96,6 +98,10 @@ public class RenameKeyDialog extends SheimiDialogFragment implements
             return;
         }
         mFromFile.renameTo(file);
+        SecurePrefsHelper secrets = MGitApplication.getContext().getSecurePrefsHelper();
+        if (secrets != null) {
+            secrets.rename(mFromFile.getName(), file.getName());
+        }
 	try {
 	    PrivateKeyUtils.getPublicKey(mFromFile).renameTo(PrivateKeyUtils.getPublicKey(file));
 	} catch (Exception e) {

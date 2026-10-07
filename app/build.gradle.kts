@@ -90,7 +90,6 @@ dependencies {
     implementation("commons-io:commons-io:2.5")
     implementation("org.eclipse.jgit:org.eclipse.jgit:3.7.1.201504261725-r")
     implementation("com.nostra13.universalimageloader:universal-image-loader:1.9.5")
-    implementation("com.scottyab:secure-preferences-lib:0.1.7")
     // 2.6.0+ ships 16 KB page-aligned native libs (built with NDK r27, minSdk 21).
     // Older versions (<= 2.5.x) have 4 KB LOAD alignment and fail Play's 16 KB check.
     implementation("org.conscrypt:conscrypt-android:2.7.0")
