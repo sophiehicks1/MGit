@@ -24,6 +24,11 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 
 import com.manichord.mgit.permissions.PermissionsHelper;
@@ -56,6 +61,36 @@ public class SheimiFragmentActivity extends AppCompatActivity {
         BasicFunctions.setActiveActivity(this);
         setTheme(Profile.getThemeResource(getApplicationContext()));
         updateLocale(Profile.useEnglishLocale(getApplicationContext()));
+    }
+
+    @Override
+    protected void onPostCreate(Bundle savedInstanceState) {
+        super.onPostCreate(savedInstanceState);
+        applySystemBarInsets();
+    }
+
+    /**
+     * Since targetSdk 35 the app always draws behind the status and navigation bars. Keep the
+     * action bar and content inside them (and above the keyboard), as before edge-to-edge.
+     */
+    private void applySystemBarInsets() {
+        View root = findViewById(androidx.appcompat.R.id.decor_content_parent);
+        if (root == null) {
+            root = findViewById(android.R.id.content);
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
+            Insets bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            view.setPadding(bars.left, bars.top, bars.right, Math.max(bars.bottom, ime.bottom));
+            return WindowInsetsCompat.CONSUMED;
+        });
+        // the bars now show the window background, so pick icon colours that contrast with it
+        boolean lightTheme = Profile.getTheme(this) == 0;
+        WindowInsetsControllerCompat controller =
+            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        controller.setAppearanceLightStatusBars(lightTheme);
+        controller.setAppearanceLightNavigationBars(lightTheme);
     }
 
     private void updateLocale(boolean useEnglishLocale) {
