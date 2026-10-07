@@ -4,6 +4,7 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.os.Bundle;
+import android.os.Environment;
 import android.util.SparseArray;
 
 import org.eclipse.jgit.api.Git;
@@ -74,7 +75,7 @@ public class Repo implements Comparable<Repo>, Serializable {
 
     public static final String DOT_GIT_DIR = ".git";
     public static final String EXTERNAL_PREFIX = "external://";
-    public static final String REPO_DIR = "repo";
+    public static final String DEFAULT_REPO_ROOT_NAME = "MGit";
 
     private static SparseArray<RepoOpTask> mRepoTasks = new SparseArray<RepoOpTask>();
 
@@ -503,7 +504,7 @@ public class Repo implements Comparable<Repo>, Serializable {
         }
         File repoDir = preferenceHelper.getRepoRoot();
         if (repoDir == null) {
-            repoDir = FsUtils.getExternalDir(REPO_DIR, true);
+            repoDir = getDefaultRepoRoot();
             Timber.d("PRESET repo path:"+new File(repoDir, localpath).getAbsolutePath());
             return new File(repoDir, localpath);
         } else {
@@ -513,9 +514,25 @@ public class Repo implements Comparable<Repo>, Serializable {
         }
     }
 
+    /**
+     * Repos go in shared storage by default so that other apps (editors, note apps, etc.)
+     * can open them. Writing there relies on the "All files access" permission.
+     */
+    public static File getDefaultRepoRoot() {
+        File root = new File(Environment.getExternalStorageDirectory(), DEFAULT_REPO_ROOT_NAME);
+        if (!root.exists()) {
+            root.mkdirs();
+        }
+        return root;
+    }
+
     public static void setLocalRepoRoot(Context context, File repoRoot) {
         PreferenceHelper prefs = ((MGitApplication) context.getApplicationContext()).getPrefenceHelper();
         File oldRoot = prefs.getRepoRoot();
+        if (oldRoot == null) {
+            // no custom root set yet, so existing repos live in the default location
+            oldRoot = getDefaultRepoRoot();
+        }
         prefs.setRepoRoot(repoRoot.getAbsolutePath());
 
         // need to make any existing "internal" repos "external" so that their paths are still correct
