@@ -97,7 +97,10 @@ public class RenameKeyDialog extends SheimiDialogFragment implements
             mNewFilename.setError(getString(R.string.alert_file_exists));
             return;
         }
-        mFromFile.renameTo(file);
+        if (!mFromFile.renameTo(file)) {
+            showToastMessage(R.string.error_rename_key_failed);
+            return;
+        }
         SecurePrefsHelper secrets = MGitApplication.getContext().getSecurePrefsHelper();
         if (secrets != null) {
             secrets.rename(mFromFile.getName(), file.getName());

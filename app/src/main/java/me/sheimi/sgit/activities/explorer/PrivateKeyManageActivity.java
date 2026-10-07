@@ -111,7 +111,8 @@ public class PrivateKeyManageActivity extends FileExplorerActivity implements Ac
 			    FsUtils.deleteFile(mChosenFile);
 			    FsUtils.deleteFile(PrivateKeyUtils.getPublicKey(mChosenFile));
 			    SecurePrefsHelper secrets = MGitApplication.getContext().getSecurePrefsHelper();
-			    if (secrets != null) {
+			    // keep the passphrase if the key could not actually be deleted
+			    if (secrets != null && !mChosenFile.exists()) {
 				secrets.remove(mChosenFile.getName());
 			    }
 			    refreshList();
