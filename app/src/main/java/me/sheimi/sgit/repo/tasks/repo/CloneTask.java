@@ -127,6 +127,10 @@ public class CloneTask extends RepoRemoteOpTask {
 
     public class RepoCloneMonitor implements ProgressMonitor {
 
+        @Override
+        public void showDuration(boolean enabled) {
+        }
+
         private int mTotalWork;
         private int mWorkDone;
         private int mLastProgress;

@@ -2,20 +2,21 @@ package me.sheimi.sgit.ssh;
 
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
-import com.jcraft.jsch.KeyPair;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.UserInfo;
 
-import org.eclipse.jgit.transport.CredentialsProviderUserInfo;
-import org.eclipse.jgit.transport.JschConfigSessionFactory;
-import org.eclipse.jgit.transport.OpenSshConfig.Host;
+import org.eclipse.jgit.transport.ssh.jsch.JschConfigSessionFactory;
+import org.eclipse.jgit.transport.ssh.jsch.OpenSshConfig.Host;
 import org.eclipse.jgit.util.FS;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 
+import me.sheimi.android.utils.SecurePrefsHelper;
 import me.sheimi.sgit.MGitApplication;
+import timber.log.Timber;
 
 /**
  * Custom config for Jsch, including using user-provided private keys
@@ -32,13 +33,9 @@ public class SGitSessionFactory extends JschConfigSessionFactory {
     protected void configure(Host host, Session session) {
         session.setConfig("StrictHostKeyChecking", "yes");
         session.setConfig("PreferredAuthentications", "publickey");
-
-        // Awful use of App singleton but not really any other way to get hold of a provider that needs
-        // to have been initialised with an Android context
-        UserInfo userInfo = new CredentialsProviderUserInfo(session, MGitApplication.getJschCredentialsProvider());
-        session.setUserInfo(userInfo);
+        // passphrases are supplied up front in createDefaultJSch, so never prompt
+        session.setUserInfo(NonInteractiveUserInfo.INSTANCE);
     }
-
 
     @Override
     protected JSch createDefaultJSch(FS fs) throws JSchException {
@@ -49,12 +46,59 @@ public class SGitSessionFactory extends JschConfigSessionFactory {
             throw new JSchException("Could not load pinned host keys", e);
         }
         PrivateKeyUtils.migratePrivateKeys();
-        File sshDir = PrivateKeyUtils.getPrivateKeyFolder();
-        for (File file : sshDir.listFiles()) {
-            KeyPair kpair = KeyPair.load(jsch, file.getAbsolutePath());
-            jsch.addIdentity(file.getAbsolutePath());
+        SecurePrefsHelper secrets = MGitApplication.getContext().getSecurePrefsHelper();
+        File[] keys = PrivateKeyUtils.getPrivateKeyFolder().listFiles();
+        if (keys == null) {
+            return jsch;
+        }
+        for (File key : keys) {
+            String passphrase = secrets == null ? null : secrets.get(key.getName());
+            try {
+                jsch.addIdentity(key.getAbsolutePath(),
+                    passphrase == null ? null : passphrase.getBytes(StandardCharsets.UTF_8));
+            } catch (JSchException e) {
+                // e.g. wrong stored passphrase: skip this key rather than failing every connection
+                Timber.w(e, "skipping unusable private key %s", key.getName());
+            }
         }
         return jsch;
     }
 
+    /**
+     * Declines every prompt: unknown host keys are rejected and encrypted keys without a stored
+     * passphrase are skipped.
+     */
+    private static class NonInteractiveUserInfo implements UserInfo {
+        static final NonInteractiveUserInfo INSTANCE = new NonInteractiveUserInfo();
+
+        @Override
+        public String getPassphrase() {
+            return null;
+        }
+
+        @Override
+        public String getPassword() {
+            return null;
+        }
+
+        @Override
+        public boolean promptPassword(String message) {
+            return false;
+        }
+
+        @Override
+        public boolean promptPassphrase(String message) {
+            return false;
+        }
+
+        @Override
+        public boolean promptYesNo(String message) {
+            return false;
+        }
+
+        @Override
+        public void showMessage(String message) {
+            Timber.i("ssh: %s", message);
+        }
+    }
 }

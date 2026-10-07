@@ -85,6 +85,10 @@ public abstract class RepoOpTask extends SheimiAsyncTask<Void, String, Boolean> 
 
     class BasicProgressMonitor implements ProgressMonitor {
 
+        @Override
+        public void showDuration(boolean enabled) {
+        }
+
         private int mTotalWork;
         private int mWorkDone;
         private int mLastProgress;
