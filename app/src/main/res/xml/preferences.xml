@@ -78,7 +78,7 @@
             android:title="@string/preference_use_gravatar"
             android:summary="@string/preference_use_gravatar_summary"
             android:key="@string/pref_key_use_gravatar"
-            android:defaultValue="true"
+            android:defaultValue="false"
             android:persistent="true"
             >
         </SwitchPreference>
