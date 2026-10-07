@@ -1,6 +1,7 @@
 package me.sheimi.android.utils;
 
 import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import androidx.core.content.FileProvider;
@@ -15,6 +16,7 @@ import java.util.Date;
 import java.util.Locale;
 
 import me.sheimi.android.activities.SheimiFragmentActivity;
+import me.sheimi.sgit.MGitApplication;
 import me.sheimi.sgit.R;
 
 /**
@@ -90,11 +92,12 @@ public class FsUtils {
      * @return
      */
     public static File getAppDir(boolean isExternal) {
-        SheimiFragmentActivity activeActivity = BasicFunctions.getActiveActivity();
+        // use the application context: there may be no active activity when a background task runs
+        Context context = MGitApplication.getContext();
         if (isExternal) {
-            return activeActivity.getExternalFilesDir(null);
+            return context.getExternalFilesDir(null);
         } else {
-            return activeActivity.getFilesDir();
+            return context.getFilesDir();
         }
     }
 

@@ -2,6 +2,7 @@ package me.sheimi.android.utils;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.StringRes;
+import androidx.fragment.app.DialogFragment;
 import android.widget.ImageView;
 
 import com.manichord.mgit.dialogs.ErrorDialog;
@@ -71,7 +72,7 @@ public class BasicFunctions {
         ErrorDialog errorDialog = new ErrorDialog();
         errorDialog.setErrorRes(errorRes);
         errorDialog.setErrorTitleRes(errorTitleRes);
-        errorDialog.show(activity.getSupportFragmentManager(), "error-dialog");
+        showDialogSafely(activity, errorDialog, "error-dialog");
     }
 
     public static void showException(@NonNull @NotNull SheimiFragmentActivity activity, Throwable throwable, @StringRes final int errorTitleRes, @StringRes final int errorRes) {
@@ -79,7 +80,21 @@ public class BasicFunctions {
         errorDialog.setThrowable(throwable);
         errorDialog.setErrorRes(errorRes);
         errorDialog.setErrorTitleRes(errorTitleRes);
-        errorDialog.show(activity.getSupportFragmentManager(), "exception-dialog");
+        showDialogSafely(activity, errorDialog, "exception-dialog");
+    }
+
+    /**
+     * Background tasks can finish while the app is in the background. Showing a dialog normally at
+     * that point throws, so allow state loss: the dialog then appears when the user returns.
+     */
+    private static void showDialogSafely(SheimiFragmentActivity activity, DialogFragment dialog, String tag) {
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+            Timber.w("no activity to show %s", tag);
+            return;
+        }
+        activity.getSupportFragmentManager().beginTransaction()
+            .add(dialog, tag)
+            .commitAllowingStateLoss();
     }
 
 

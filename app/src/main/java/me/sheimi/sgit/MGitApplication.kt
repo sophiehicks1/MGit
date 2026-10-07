@@ -2,7 +2,6 @@ package me.sheimi.sgit
 
 import android.app.Application
 import android.content.Context
-import com.manichord.mgit.transport.MGitHttpConnectionFactory
 import me.sheimi.android.utils.SecurePrefsException
 import me.sheimi.android.utils.SecurePrefsHelper
 import me.sheimi.sgit.preference.PreferenceHelper
@@ -11,8 +10,8 @@ import org.acra.config.mailSender
 import org.acra.data.StringFormat
 import org.acra.ktx.initAcra
 import org.bouncycastle.jce.provider.BouncyCastleProvider
-import org.conscrypt.Conscrypt
-import org.eclipse.jgit.transport.CredentialsProvider
+import org.eclipse.jgit.transport.SshSessionFactory
+import me.sheimi.sgit.ssh.SGitSessionFactory
 import timber.log.Timber
 import java.security.Security
 
@@ -26,7 +25,6 @@ open class MGitApplication : Application() {
 
     companion object {
         private lateinit var mContext: Context
-        private lateinit var mCredentialsProvider: CredentialsProvider
         val context: Context
             get() = mContext
 
@@ -34,14 +32,8 @@ open class MGitApplication : Application() {
             return mContext as MGitApplication
         }
 
-        @JvmStatic fun getJschCredentialsProvider(): CredentialsProvider {
-            return mCredentialsProvider
-        }
-
         init {
-            MGitHttpConnectionFactory.install()
             Security.addProvider(BouncyCastleProvider())
-            Security.addProvider(Conscrypt.newProvider())
         }
     }
 
@@ -52,10 +44,10 @@ open class MGitApplication : Application() {
         prefenceHelper = PreferenceHelper(this)
         try {
             securePrefsHelper = SecurePrefsHelper(this)
-            mCredentialsProvider = AndroidJschCredentialsProvider(securePrefsHelper)
         } catch (e: SecurePrefsException) {
             Timber.e(e)
         }
+        configureJGit()
     }
 
     override fun attachBaseContext(base:Context) {
@@ -74,6 +66,13 @@ open class MGitApplication : Application() {
                 withMailTo(getString(R.string.crash_report_email))
             }
         }
+    }
+
+    private fun configureJGit() {
+        // Android has no usable home dir; JGit keeps its user-level config and caches there
+        System.setProperty("user.home", filesDir.absolutePath)
+        // also covers transports opened without SgitTransportCallback, e.g. submodules
+        SshSessionFactory.setInstance(SGitSessionFactory())
     }
 
     private fun setAppVersionPref() {

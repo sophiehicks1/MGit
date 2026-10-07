@@ -24,7 +24,6 @@ import android.widget.Toast;
 import com.manichord.mgit.ViewHelperKt;
 import com.manichord.mgit.clone.CloneViewModel;
 import com.manichord.mgit.common.OnActionClickListener;
-import com.manichord.mgit.transport.MGitHttpConnectionFactory;
 
 import java.io.File;
 import java.net.MalformedURLException;
@@ -84,8 +83,6 @@ public class RepoListActivity extends SheimiFragmentActivity {
         });
 
         PrivateKeyUtils.migratePrivateKeys();
-
-        initUpdatedSSL();
 
         mRepoListAdapter = new RepoListAdapter(this);
         binding.repoList.setAdapter(mRepoListAdapter);
@@ -252,11 +249,6 @@ public class RepoListActivity extends SheimiFragmentActivity {
 
     public void finish() {
         rawfinish();
-    }
-
-    private void initUpdatedSSL() {
-        MGitHttpConnectionFactory.install();
-        Timber.i("Installed custom HTTPS factory");
     }
 
     private void cloneRepo() {

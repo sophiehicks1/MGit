@@ -42,7 +42,7 @@ public class AvatarDownloader extends BaseImageDownloader {
         SharedPreferences sharedPreference = context.getSharedPreferences(
             context.getString(R.string.preference_file_key), Context.MODE_PRIVATE);
 
-        return sharedPreference.getBoolean(context.getString(R.string.pref_key_use_gravatar), true);
+        return sharedPreference.getBoolean(context.getString(R.string.pref_key_use_gravatar), false);
     }
 
     /**
