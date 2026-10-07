@@ -5,11 +5,14 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import me.sheimi.android.activities.SheimiFragmentActivity;
 import me.sheimi.android.utils.BasicFunctions;
 import me.sheimi.sgit.R;
 import me.sheimi.sgit.database.models.Repo;
+import me.sheimi.sgit.repo.tasks.BackgroundTask;
 import me.sheimi.sgit.repo.tasks.repo.GetCommitTask;
 import me.sheimi.sgit.repo.tasks.repo.GetCommitTask.GetCommitCallback;
 
@@ -17,7 +20,6 @@ import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.revwalk.RevCommit;
 
 import android.content.Context;
-import android.os.AsyncTask;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -47,7 +49,10 @@ public class CommitsListAdapter extends BaseAdapter {
     private int mProgressCursor;
     private long mPostAtTime;
 
-    private class BackgroundUpdate extends AsyncTask<Void, Void, Void> {
+    // filtering is in-memory only, so keep it off the git task queue where it could wait behind a clone
+    private static final ExecutorService FILTER_EXECUTOR = Executors.newSingleThreadExecutor();
+
+    private class BackgroundUpdate extends BackgroundTask<Void, Void, Void> {
         @Override
         protected Void doInBackground(Void... params) {
             int i;
@@ -84,7 +89,7 @@ public class CommitsListAdapter extends BaseAdapter {
                     // Updates after 1 s
                     mPostAtTime = System.nanoTime() + 1000000000;
                     mUpdate = new BackgroundUpdate();
-                    mUpdate.execute();
+                    mUpdate.executeOn(FILTER_EXECUTOR);
                 }
             }
         }
@@ -126,7 +131,7 @@ public class CommitsListAdapter extends BaseAdapter {
 
     private void stopFiltering() {
         try {
-            mUpdate.cancel(true);
+            mUpdate.cancel();
             mUpdate = null;
         } catch (Exception e) {
         }
@@ -142,7 +147,7 @@ public class CommitsListAdapter extends BaseAdapter {
             mProgressCursor = 0;
             // Show first result after 100 ms
             mPostAtTime = System.nanoTime() + 100000000;
-            mUpdate.execute();
+            mUpdate.executeOn(FILTER_EXECUTOR);
         } else {
             notifyDataSetChanged();
         }
